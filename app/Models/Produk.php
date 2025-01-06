@@ -13,7 +13,6 @@ class Produk extends Model
         'nama',
         'stock',
         'harga',
-        'waktu_mulai',
         'image',
         'status'
     ];
