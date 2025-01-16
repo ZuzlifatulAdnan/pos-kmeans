@@ -10,9 +10,7 @@ class Order extends Model
     use HasFactory;
     protected $fillable = [
         'nama',
-        'jenis_kelamin',
         'total_harga',
-        'note',
         'pembayaran_id'
     ];
 
@@ -20,4 +18,8 @@ class Order extends Model
     {
         return $this->belongsTo(Pembayaran::class);
     }
+    public function orderProduk()
+{
+    return $this->hasMany(Order_produk::class);
+}
 }

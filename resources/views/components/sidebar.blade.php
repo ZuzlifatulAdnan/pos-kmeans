@@ -20,14 +20,19 @@
             </li>
             <li class="menu-header">Menu</li>
             <li class="nav-item dropdown {{ $type_menu === 'kasir' ? 'active' : '' }}">
-                <a href="#" class="nav-link has-dropdown"><i
+                <a href="{{ route('kasir.index') }}" class="nav-link ha"><i
                         class="fas fa-cash-register"></i><span>Kasir</span></a>
+
+            </li>
+            <li class="nav-item dropdown {{ $type_menu === 'order' ? 'active' : '' }}">
+                <a href="#" class="nav-link has-dropdown"><i
+                        class="fas fa-shopping-cart"></i><span>Order</span></a>
                 <ul class="dropdown-menu">
-                    <li class='{{ Request::is('kasir') ? 'active' : '' }}'>
-                        <a class="nav-link" href="{{ route('kasir.index') }}">Kasir</a>
-                    </li>
                     <li class='{{ Request::is('order') ? 'active' : '' }}'>
-                        <a class="nav-link" href="{{ route('order.index') }}">Riwayat Order</a>
+                        <a class="nav-link" href="{{ route('order.index') }}">Order</a>
+                    </li>
+                    <li class='{{ Request::is('kmeans') ? 'active' : '' }}'>
+                        <a class="nav-link" href="{{ route('kmeans.index') }}">Kmeans</a>
                     </li>
                 </ul>
             </li>
@@ -37,8 +42,7 @@
 
             </li>
             <li class="nav-item dropdown {{ $type_menu === 'produk' ? 'active' : '' }}">
-                <a href="#" class="nav-link has-dropdown"><i
-                        class="fas fa-tags"></i><span>Produk</span></a>
+                <a href="#" class="nav-link has-dropdown"><i class="fas fa-tags"></i><span>Produk</span></a>
                 <ul class="dropdown-menu">
                     <li class='{{ Request::is('produk') ? 'active' : '' }}'>
                         <a class="nav-link" href="{{ route('produk.index') }}">Daftar Produk</a>
@@ -48,12 +52,15 @@
                     </li>
                 </ul>
             </li>
+            @if (Auth::user()->role == 'Admin')
+                <li class="nav-item dropdown {{ $type_menu === 'user' ? 'active' : '' }}">
+                    <a href="{{ route('user.index') }}" class="nav-link ha"><i
+                            class="fas fa-users"></i><span>Users</span></a>
 
-            <li class="nav-item dropdown {{ $type_menu === 'user' ? 'active' : '' }}">
-                <a href="{{ route('user.index') }}" class="nav-link ha"><i
-                        class="fas fa-users"></i><span>Users</span></a>
+                </li>
+            @else
+            @endif
 
-            </li>
         </ul>
     </aside>
 </div>

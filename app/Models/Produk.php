@@ -21,4 +21,8 @@ class Produk extends Model
     {
         return $this->belongsTo(Kategori_produk::class);
     }
+    public function orderProduks()
+    {
+        return $this->hasMany(Order_produk::class);
+    }
 }

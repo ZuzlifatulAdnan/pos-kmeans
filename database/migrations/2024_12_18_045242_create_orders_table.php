@@ -14,9 +14,7 @@ return new class extends Migration
         Schema::create('orders', function (Blueprint $table) {
             $table->id();
             $table->string('nama');
-            $table->string('jenis_kelamin');
             $table->string('total_harga');
-            $table->string('note')->nullable();
             $table->foreignId('pembayaran_id')->constrained('pembayarans')->cascadeOnDelete()->cascadeOnUpdate();
             $table->timestamps();
         });

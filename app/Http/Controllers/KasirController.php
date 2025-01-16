@@ -2,146 +2,108 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Kategori_produk;
+use App\Models\Order;
+use App\Models\Order_produk;
+use App\Models\Pembayaran;
+use App\Models\Produk;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Barryvdh\DomPDF\Facade as PDF;
+use Illuminate\Support\Facades\Redirect;
 
 class KasirController extends Controller
 {
     /**
-     * Display a listing of the resource.
+     * Display a listing of the orders.
      */
     public function index(Request $request)
     {
-        $type_menu = 'user';
+        $type_menu = 'kasir';
+        $produks = Produk::where('status', 'Aktif')->get();
+        $pembayarans = Pembayaran::all();
 
-        // ambil data dari tabel user berdasarkan nama jika terdapat request
-        $keyword = trim($request->input('name'));
-        $role = $request->input('role');
-
-        // Query users dengan filter pencarian dan role
-        $users = User::when($keyword, function ($query, $name) {
-            $query->where('name', 'like', '%' . $name . '%');
-        })
-            ->when($role, function ($query, $role) {
-                $query->where('role', $role);
-            })
-            ->latest()
-            ->paginate(10);
-
-        // Tambahkan parameter query ke pagination
-        $users->appends(['name' => $keyword, 'role' => $role]);
-
-        // arahkan ke file pages/users/index.blade.php
-        return view('pages.users.index', compact('type_menu', 'users'));
+        return view('pages.kasir.create', compact('type_menu', 'produks', 'pembayarans'));
     }
 
     /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
-    {
-        $type_menu = 'user';
-
-        // arahkan ke file pages/users/create.blade.php
-        return view('pages.users.create', compact('type_menu'));
-    }
-
-    /**
-     * Store a newly created resource in storage.
+     * Menyimpan data order
      */
     public function store(Request $request)
     {
-        // validasi data dari form tambah user
-        $validatedData = $request->validate([
-            'name' => 'required',
-            'email' => 'required|email|unique:users,email',
-            'password' => 'required|min:8',
-            'role' => 'required',
-            'image' => 'nullable|mimes:jpg,jpeg,png,gif'
-        ]);
-        // Handle the image upload if present
-        $imagePath = null;
-        if ($request->hasFile('image')) {
-            $image = $request->file('image');
-            $imagePath = uniqid() . '.' . $image->getClientOriginalExtension();
-            $image->move('img/user/', $imagePath);
-        }
-        //masukan data kedalam tabel users
-        User::create([
-            'name' => $validatedData['name'],
-            'email' => $validatedData['email'],
-            'password' => Hash::make($validatedData['password']),
-            'role' => $validatedData['role'],
-            'image' => $imagePath, // Store the image path if available
-        ]);
-
-        //jika proses berhsil arahkan kembali ke halaman users dengan status success
-        return Redirect::route('user.index')->with('success', 'User berhasil di tambah.');
-    }
-
-    /**
-     * Display the specified resource.
-     */
-    public function edit(User $user)
-    {
-        $type_menu = 'user';
-
-        // arahkan ke file pages/users/edit
-        return view('pages.users.edit', compact('user', 'type_menu'));
-    }
-
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function update(Request $request, User $user)
-    {
-        // Validate the form data
         $request->validate([
-            'name' => 'required',
-            'email' => 'required|email|unique:users,email,' . $user->id, // Exclude current user email
-            'password' => 'nullable|min:8', // Password should be nullable
-            'role' => 'required',
-            'image' => 'nullable|mimes:jpg,jpeg,png,gif'
+            'nama_pemesan' => 'required|string|max:255',
+            'produk_id' => 'required|array|min:1',
+            'produk_id.*' => 'exists:produks,id|distinct',
+            'jumlah' => 'required|array|min:1',
+            'jumlah.*' => 'integer|min:1',
+            'pembayaran_id' => 'required|exists:pembayarans,id',
         ]);
 
-        // Update the user data
-        $user->update([
-            'name' => $request->name,
-            'email' => $request->email,
-            'role' => $request->role,
-        ]);
-
-        if (!empty($request->password)) {
-            $user->update([
-                'password' => Hash::make($request->password)
-            ]);
+        if (count($request->produk_id) !== count($request->jumlah)) {
+            return back()->withErrors(['error' => 'Jumlah produk dan kuantitas tidak sesuai!']);
         }
 
-        if ($request->hasFile('image')) {
-            $image = $request->file('image');
-            $path = uniqid() . '.' . $image->getClientOriginalExtension();
-            $image->move('img/user/', $path);
-            $user->update([
-                'image' => $path
-            ]);
-        }
+        DB::transaction(function () use ($request, &$order) {
+            $totalHarga = 0;
 
-        return Redirect::route('user.index')->with('success', 'User berhasil di ubah.');
+            // Ambil data produk yang dipesan berdasarkan produk_id
+            $produks = Produk::whereIn('id', $request->produk_id)->get()->keyBy('id');
+
+            foreach ($request->produk_id as $index => $produkId) {
+                $produk = $produks[$produkId];
+
+                // Validasi apakah stok mencukupi
+                if ($produk->stock < $request->jumlah[$index]) {
+                    throw new \Exception('Stok produk ' . $produk->nama . ' tidak mencukupi!');
+                }
+
+                // Hitung total harga
+                $totalHarga += $produk->harga * $request->jumlah[$index];
+            }
+
+            // Simpan data order
+            $order = Order::create([
+                'nama' => $request->nama_pemesan,
+                'total_harga' => $totalHarga,
+                'pembayaran_id' => $request->pembayaran_id,
+            ]);
+
+            // Simpan detail produk yang dipesan dan kurangi stok
+            foreach ($request->produk_id as $index => $produkId) {
+                $produk = $produks[$produkId];
+
+                // Kurangi stok produk
+                $produk->stock -= $request->jumlah[$index];
+                $produk->save();
+
+                // Simpan detail produk yang dipesan
+                Order_produk::create([
+                    'order_id' => $order->id,
+                    'produk_id' => $produkId,
+                    'jumlah' => $request->jumlah[$index],
+                    'harga' => $produk->harga,
+                ]);
+            }
+        });
+
+        // Redirect to show the created order page
+        return redirect()->route('kasir.show', $order->id)->with('success', 'Pesanan berhasil dibuat!');
     }
-
     /**
-     * Remove the specified resource from storage.
+     * Menampilkan halaman pesanan berhasil
      */
-    public function destroy(User $user)
+    public function show($orderId)
     {
-        $user->delete();
-        return Redirect::route('user.index')->with('success', 'User berhasil di hapus.');
-    }
-    public function show($id)
-    {
-        $type_menu = 'user';
-        $user = User::find($id);
-
-        // arahkan ke file pages/users/edit
-        return view('pages.users.show', compact('user', 'type_menu'));
+        $type_menu = 'kasir';
+        $order = Order::with('orderProduk.produk', 'pembayaran')
+            ->findOrFail($orderId);
+        $usaha = [
+            'nama_usaha' => 'Calma',
+            'alamat' => 'DSC Lantai 2 IIB Darmajaya',
+            'no_telepon' => '08123456789',
+            'logo' => asset('img/logo/logo.png')  // Sesuaikan dengan path logo Anda
+        ];
+        return view('pages.kasir.berhasil', compact('order', 'type_menu', 'usaha'));
     }
 }
